@@ -17,6 +17,7 @@ namespace Canon.Eos.Framework
         public event EventHandler Shutdown;
         public event EventHandler LiveViewStarted;
         public event EventHandler LiveViewStopped;
+        public event EventHandler<ImageTransferedEventArgs> ImageTransfered;
         public event EventHandler<EosLiveViewEventArgs> LiveViewUpdate;
 
         internal EosCamera(IntPtr camera)
@@ -192,6 +193,6 @@ namespace Canon.Eos.Framework
         public override string ToString()
         {
             return this.DeviceDescription;
-        }               
+        }
     }
 }

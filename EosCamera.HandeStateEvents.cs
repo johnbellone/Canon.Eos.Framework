@@ -19,6 +19,7 @@ namespace Canon.Eos.Framework
                 case Edsdk.StateEvent_Shutdown:
                     this.OnStateEventShutdown(EventArgs.Empty);
                     break;
+           
             }
             return Edsdk.EDS_ERR_OK;
         }        

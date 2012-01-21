@@ -1,9 +1,26 @@
 ﻿using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Canon.Eos.Framework.Internal;
 
 namespace Canon.Eos.Framework
 {
+    public class ImageTransferedEventArgs : EventArgs
+    {
+        private System.Drawing.Image _image;
+
+        public System.Drawing.Image Image
+        {
+            get { return _image; }
+        }
+
+        public ImageTransferedEventArgs(System.Drawing.Image image)
+        {
+            _image = image;
+        }
+    }
+
     partial class EosCamera
     {
         private void OnObjectEventVolumeInfoChanged(IntPtr sender, IntPtr context)
@@ -33,9 +50,46 @@ namespace Canon.Eos.Framework
         private void OnObjectEventDirItemContentChanged(IntPtr sender, IntPtr context)
         {
         }
+
+        private void CreateBitmapFromStream(IntPtr stream, Int32 size)
+        {
+            Debug.WriteLine("Canon.Eos.Framework.EosCamera.CreateBitmapFromStream");
+
+            var image = IntPtr.Zero;
+            try
+            {
+                EosAssert.NotOk(Edsdk.EdsGetPointer(stream, out image), "Failed to get memory pointer");
+
+                var buffer = new byte[size];
+                Marshal.Copy(image, buffer, 0, size);
+                var ms = new MemoryStream(buffer);
+                var bitmap = new System.Drawing.Bitmap(ms);
+
+                if (ImageTransfered != null)
+                {
+                    ImageTransferedEventArgs args = new ImageTransferedEventArgs(bitmap);
+                    ImageTransfered(this, args);
+                }
+            }
+            catch (EosException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new EosException(-1, "Unexpected exception while marshaling.", ex);
+            }
+            finally
+            {
+                if (image != IntPtr.Zero)
+                    Edsdk.EdsRelease(image);
+            }
+        }
         
         private void OnObjectEventDirItemRequestTransfer(IntPtr sender, IntPtr context)
         {
+            Debug.WriteLine("Canon.Eos.Framework.EosCamera.OnObjectEventDirItemRequestTransfer");
+
             var stream = IntPtr.Zero;
             try
             {
@@ -44,9 +98,11 @@ namespace Canon.Eos.Framework
                 
                 var location = Path.Combine(_picturePath ?? Environment.CurrentDirectory, directoryItemInfo.szFileName);
 
-                EosAssert.NotOk(Edsdk.EdsCreateFileStream(location, Edsdk.EdsFileCreateDisposition.CreateAlways, Edsdk.EdsAccess.ReadWrite, out stream), "Failed to create file stream");                
+                EosAssert.NotOk(Edsdk.EdsCreateMemoryStream(directoryItemInfo.Size, out stream), "Failed to create memory stream");                
                 EosAssert.NotOk(Edsdk.EdsDownload(sender, directoryItemInfo.Size, stream), "Failed to create file stream");
                 EosAssert.NotOk(Edsdk.EdsDownloadComplete(sender), "Failed to complete download");
+
+                CreateBitmapFromStream(stream, Convert.ToInt32(directoryItemInfo.Size));
             }
             catch (EosException)
             {
